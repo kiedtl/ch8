@@ -12,6 +12,28 @@ static SDL_Texture *texture = NULL;
 static SDL_AudioDeviceID device = 0;
 static SDL_AudioSpec *spec = NULL;
 
+// Stolen from danirod/chip8
+//
+// Maps SDL scancodes to CHIP-8 keys.
+const char keys[] = {
+    SDL_SCANCODE_X, // 0
+    SDL_SCANCODE_1, // 1
+    SDL_SCANCODE_2, // 2
+    SDL_SCANCODE_3, // 3
+    SDL_SCANCODE_Q, // 4
+    SDL_SCANCODE_W, // 5
+    SDL_SCANCODE_E, // 6
+    SDL_SCANCODE_A, // 7
+    SDL_SCANCODE_S, // 8
+    SDL_SCANCODE_D, // 9
+    SDL_SCANCODE_Z, // A
+    SDL_SCANCODE_C, // B
+    SDL_SCANCODE_4, // C
+    SDL_SCANCODE_R, // D
+    SDL_SCANCODE_F, // E
+    SDL_SCANCODE_V  // F
+};
+
 bool
 init_gui(void)
 {
@@ -112,6 +134,14 @@ load(struct CHIP8 *chip8, char *filename)
 	memcpy(chip8->memory + ROM_START, src, st.st_size);
 }
 
+uint8_t
+listen_for(char key)
+{
+	uint8_t scancode = keys[key];
+	const uint8_t *sdl_keys = SDL_GetKeyboardState(NULL);
+	return sdl_keys[scancode];
+}
+
 void
 exec(struct CHIP8 *chip8)
 {
@@ -138,26 +168,66 @@ exec(struct CHIP8 *chip8)
 		switch (P) {
 		break; case 0x0:
 			switch (op) {
-			break; case 0x00e0: // 00E0: CLS - reset display
+			break; case 0x00E0: // 00E0: CLS - reset display
 				chip8->redraw = true;
 				memset(chip8->display, 0x0, sizeof(chip8->display));
+			break; case 0x00EE: // 00EE: RET - pop stack frame and return to that address
+				// TODO: handle underflow
+				chip8->PC = chip8->stack[chip8->SC];
+				chip8->SC -= 1;
 			};
 		break; case 0x1: // 1NNN: JMP - Jump to NNN
 			chip8->PC = NNN;
-		break; case 0x2:
-		break; case 0x3:
-		break; case 0x4:
-		break; case 0x5:
-		break; case 0x6: // 6XNN: LD - Set VX = NN
+		break; case 0x2: // 2NNN: CAL - Push current PC, jump to NNN
+			// TODO: handle overflow
+			chip8->SC += 1;
+			chip8->stack[chip8->SC] = chip8->PC;
+			chip8->PC = NNN;
+		break; case 0x3: // 3XNN: Skip next if X == NN
+			chip8->PC += chip8->vregs[X] == NN ? 2 : 0;
+		break; case 0x4: // 4XNN: Skip next if X != NN
+			chip8->PC += chip8->vregs[X] != NN ? 2 : 0;
+		break; case 0x5: // 5XY0: Skip next if X == Y
+			chip8->PC += chip8->vregs[X] == chip8->vregs[Y] ? 2 : 0;
+		break; case 0x6: // 6XNN: Set VX = NN
 			chip8->vregs[X] = NN;
-		break; case 0x7: // 7XNN: ADD - Add NN to VX
+		break; case 0x7: // 7XNN: Add NN to VX
 			chip8->vregs[X] += NN;
 		break; case 0x8:
-		break; case 0x9:
+			switch (N) {
+			break; case 0x0: // 8XY0: ? - VX = VY
+				chip8->vregs[X] = chip8->vregs[Y];
+			break; case 0x1: // 8XY1: ? - VX |= VY
+				chip8->vregs[X] |= chip8->vregs[Y];
+			break; case 0x2: // 8XY2: ? - VX &= VY
+				chip8->vregs[X] &= chip8->vregs[Y];
+			break; case 0x3: // 8XY3: ? - VX ^= VY
+				chip8->vregs[X] ^= chip8->vregs[Y];
+			break; case 0x4: // 8XY4: ? - VX += VY (VF == overflow?)
+				;
+				size_t result = chip8->vregs[X] + chip8->vregs[Y];
+				if (result > 255) chip8->vregs[15] = 1;
+				chip8->vregs[X] = result;
+			break; case 0x5: // 8XY5: ? - VX -= VY
+				chip8->vregs[X] -= chip8->vregs[Y];
+			break; case 0x6: // 8X06: ? - VX >>= 1, VF = LSB
+				chip8->vregs[15] = chip8->vregs[15] & 1;
+				chip8->vregs[X] >>= 1;
+			break; case 0x7: // 8XY7: ? - VY -= VX
+				chip8->vregs[X] = chip8->vregs[Y] - chip8->vregs[X];
+			break; case 0xE: // 8X0E: ? - VX <<= 1, VF = MSB
+				chip8->vregs[15] = (chip8->vregs[15] & 0x80) != 0;
+				chip8->vregs[X] <<= 1;
+			}
+		break; case 0x9: // 9XY0: SNE - Skip next if X != Y
+			chip8->PC += chip8->vregs[X] != chip8->vregs[Y] ? 2 : 0;
 		break; case 0xA: // ANNN: LD - Set I to NNN
 			chip8->I = NNN;
-		break; case 0xB:
-		break; case 0xC:
+		break; case 0xB: // BNNN: JMP - Jump to V0 + NNN
+			// TODO: configurable BXNN behaviour (jump to XNN + VX)?
+			chip8->PC = (chip8->vregs[0] + NNN) & 0xFFF;
+		break; case 0xC: // CXNN: RND - VX =  rand() & NN
+			chip8->vregs[X] = rand() & NN;
 		break; case 0xD: // DXYN: DRW - Draw a sprite at coord VX,VY
 			chip8->redraw = true;
 			size_t x = chip8->vregs[X] & (D_WIDTH-1);
@@ -182,7 +252,50 @@ exec(struct CHIP8 *chip8)
 				}
 			}
 		break; case 0xE:
+			;
+			uint8_t key = chip8->vregs[X] & 0xF;
+			switch (NN) {
+			break; case 0x9E: // EX9E: Skip next if key VX is pressed
+				if (listen_for(key)) chip8->PC += 2;
+			break; case 0xA1: // EXA1: Skip next if key VX is not pressed
+				if (!listen_for(key)) chip8->PC += 2;
+			}
 		break; case 0xF:
+			switch (NN) {
+			break; case 0x07: // FX07: Set VX value of delay timer
+				chip8->vregs[X] = chip8->delay_tmr;
+			break; case 0x15: // FX15: Set delay timer to VX
+				chip8->delay_tmr = chip8->vregs[X];
+			break; case 0x18: // FX18: Set sound timer to VX
+				chip8->sound_tmr = chip8->vregs[X];
+			break; case 0x29: // FX29: Set I to FONT_START
+				chip8->I = FONT_START;
+			break; case 0x1E: // FX1E: Add VX to I
+				// TODO: configurable behaviour to set VF to 1 if I overflows
+				//       (Apparently "Spacefight 2091!" relies on this)
+				chip8->I += chip8->vregs[X];
+			break; case 0x0A: // FX0A: Wait until key VX is pressed
+				;
+				uint8_t key = chip8->vregs[X] & 0xF;
+				if (!listen_for(key))
+					chip8->PC -= 2; // redo this instruction. hacky.
+			break; case 0x33: // FX33: Convert VX to 3-char string and place at I[0..2]
+				;
+				uint8_t value = chip8->vregs[X];
+				chip8->memory[chip8->I + 0] = value / 100;
+				chip8->memory[chip8->I + 1] = (value / 10) % 10;
+				chip8->memory[chip8->I + 2] = value % 10;
+			break; case 0x55: // FX55: Load registers V0..=VX into memory[I..]
+				// TODO: configurable behaviour to increment I with r
+				for (size_t r = 0; r <= X; ++r)
+					chip8->memory[chip8->I + r] = chip8->vregs[r];
+			break; case 0x65: // FX65: Load memory[I..] into registers V0..=VX
+				// TODO: configurable behaviour to increment I with r
+				for (size_t r = 0; r <= X; ++r)
+					chip8->vregs[r] = chip8->memory[chip8->I + r];
+			break; default:
+			break;
+			}
 		break; default:
 		break;
 		};

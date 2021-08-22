@@ -37,4 +37,5 @@ struct CHIP8 {
 	uint8_t  sound_tmr;
 	uint8_t  vregs[16];
 	bool     redraw;
+	ssize_t  wait_key;
 };

@@ -39,3 +39,13 @@ struct CHIP8 {
 	bool     redraw;
 	ssize_t  wait_key;
 };
+
+struct CHIP8_inst {
+	uint16_t  op;
+	uint8_t    P;
+	uint8_t    X;
+	uint8_t    Y;
+	uint8_t    N;
+	uint8_t   NN;
+	uint16_t NNN;
+};

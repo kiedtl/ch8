@@ -236,8 +236,8 @@ exec(void)
 			if (dbg_step > 0) {
 				draw();
 				chip8_step(&chip8);
-				CHKSUB(chip8.delay_tmr, 1);
-				CHKSUB(chip8.sound_tmr, 1);
+				chip8.delay_tmr = CHKSUB(chip8.delay_tmr, 1);
+				chip8.sound_tmr = CHKSUB(chip8.sound_tmr, 1);
 				ui_buzzer = chip8.sound_tmr > 0;
 				chip8.redraw = false;
 				--dbg_step;
@@ -261,8 +261,8 @@ exec(void)
 		while (global_delta > rs) {
 			global_delta -= rs;
 
-			CHKSUB(chip8.delay_tmr, 1);
-			CHKSUB(chip8.sound_tmr, 1);
+			chip8.delay_tmr = CHKSUB(chip8.delay_tmr, 1);
+			chip8.sound_tmr = CHKSUB(chip8.sound_tmr, 1);
 
 			ui_buzzer = chip8.sound_tmr > 0;
 		}

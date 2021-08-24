@@ -2,7 +2,7 @@ CMD      = @
 
 VERSION  = 0.1.0
 NAME     = ch8
-SRC      = util.c
+SRC      = chip8.c util.c
 TERMBOX  = third_party/termbox/bin/termbox.a
 OBJ      = $(SRC:.c=.o)
 

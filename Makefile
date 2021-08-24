@@ -14,8 +14,8 @@ WARNING  = -Wall -Wpedantic -Wextra -Wold-style-definition -Wmissing-prototypes 
 	   -Werror=implicit-function-declaration -Werror=return-type
 
 DEF      = -DVERSION=\"$(VERSION)\" -D_XOPEN_SOURCE=1000 -D_DEFAULT_SOURCE
-INCL     = -I ~/local/include -Ithird_party/ -Ithird_party/termbox/src
-CC       = clang
+INCL     = -Ithird_party/ -Ithird_party/termbox/src
+CC       = cc
 CFLAGS   = -Og -g $(DEF) $(INCL) $(WARNING) -funsigned-char
 LD       = bfd
 LDFLAGS  = -fuse-ld=$(LD) -L/usr/include -lm

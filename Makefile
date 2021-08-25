@@ -18,20 +18,20 @@ INCL     = -Ithird_party/ -Ithird_party/termbox/src
 CC       = cc
 CFLAGS   = -Og -g $(DEF) $(INCL) $(WARNING) -funsigned-char
 LD       = bfd
-LDFLAGS  = -fuse-ld=$(LD) -L/usr/include -lm
+LDFLAGS  = -fuse-ld=$(LD) -L/usr/include -lm -lexecinfo
 
 .PHONY: all
-all: $(NAME)
-
-.PHONY: run
-run: $(NAME)
-	$(CMD)./$(NAME)
+all: $(NAME)-sdl
 
 %.o: %.c
 	@printf "    %-8s%s\n" "CC" $@
 	$(CMD)$(CC) -c $< -o $@ $(CFLAGS)
 
 $(OBJ): chip8.h
+
+$(NAME)-sdl: sdl_main.c $(OBJ)
+	@printf "    %-8s%s\n" "CCLD" $@
+	$(CMD)$(CC) -o $@ $^ $(CFLAGS) $(LDFLAGS) $(shell sdl2-config --cflags --libs)
 
 $(NAME): tui_main.c $(OBJ) $(TERMBOX)
 	@printf "    %-8s%s\n" "CCLD" $@

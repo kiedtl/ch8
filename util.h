@@ -2,6 +2,7 @@
 #define UTIL_H
 
 #include <stdint.h>
+#include <stdio.h>
 
 #define MAX(V,M)     ((V)>(M)?(M):(V))
 #define MIN(V,M)     ((V)<(M)?(M):(V))
@@ -10,6 +11,8 @@
 #define UNUSED(VAR)  ((void) (VAR))
 #define SIZEOF(ARR)  ((size_t)(sizeof(ARR)/sizeof(*(ARR))))
 #define BITSET(V,B)  (((V) & (B)) == (B))
+
+#define log(fmt, ...) fprintf(stderr, "LOG: "fmt"\n", __VA_ARGS__)
 
 void *ecalloc(size_t nmemb, size_t size);
 

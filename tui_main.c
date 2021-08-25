@@ -18,8 +18,6 @@
 #define WHITE 255
 #define L_RED 1
 
-#define log(fmt, ...) fprintf(stderr, fmt"\n", __VA_ARGS__)
-
 /*
  * keep track of termbox's state, so that we know if
  * tb_shutdown() is safe to call, and whether we should redraw.

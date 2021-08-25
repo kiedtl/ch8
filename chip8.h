@@ -1,3 +1,6 @@
+#ifndef CHIP8_H
+#define CHIP8_H
+
 #include <stdint.h>
 #include <stdbool.h>
 
@@ -88,3 +91,5 @@ void chip8_init(struct CHIP8 *chip8, keydown_fn_t keydown);
 void chip8_load(struct CHIP8 *chip8, char *data, size_t sz);
 struct CHIP8_inst chip8_next(struct CHIP8 *chip8, size_t where);
 void chip8_step(struct CHIP8 *chip8);
+
+#endif

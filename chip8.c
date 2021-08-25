@@ -47,8 +47,8 @@ chip8_next(struct CHIP8 *chip8, size_t where)
 
 	uint8_t op1 = chip8->memory[where];
 	uint8_t op2 = chip8->memory[where + 1];
-	uint8_t op3 = chip8->memory[where + 2];
-	uint8_t op4 = chip8->memory[where + 3];
+	uint8_t op3 = (where + 2) < SIZEOF(chip8->memory) ? chip8->memory[where + 2] : 0;
+	uint8_t op4 = (where + 3) < SIZEOF(chip8->memory) ? chip8->memory[where + 3] : 0;
 
 	inst.op     = (op1 << 8) | op2;
 	inst.op_len = inst.op == 0xF000 ? 4 : 2;
@@ -100,6 +100,8 @@ chip8_step(struct CHIP8 *chip8)
 	uint16_t NNNN = inst.NNNN;
 
 	chip8->PC += inst.op_len;
+
+	bool set_vf = false;
 
 	switch (P) {
 	break; case 0x0:
@@ -205,17 +207,19 @@ chip8_step(struct CHIP8 *chip8)
 			size_t result = chip8->vregs[X] + chip8->vregs[Y];
 			if (result > 255) chip8->vregs[15] = 1;
 			chip8->vregs[X] = (char)(result & 0xFF);
-		break; case 0x5: // 8XY5: ? - VX -= VY
-			chip8->vregs[15] = chip8->vregs[X] >= chip8->vregs[Y];
+		break; case 0x5: // 8XY5: VX -= VY
+			set_vf = chip8->vregs[X] >= chip8->vregs[Y];
 			chip8->vregs[X] -= chip8->vregs[Y];
-		break; case 0x6: // 8X06: ? - VX >>= 1, VF = LSB
+			chip8->vregs[15] = (size_t)set_vf;
+		break; case 0x6: // 8X06: VX >>= 1, VF = LSB
 			// TODO: option to shift VX into VY
 			chip8->vregs[15] = chip8->vregs[X] & 1;
 			chip8->vregs[X] >>= 1;
-		break; case 0x7: // 8XY7: ? - VY -= VX
-			chip8->vregs[15] = chip8->vregs[Y] >= chip8->vregs[X];
+		break; case 0x7: // 8XY7: VX = VY - VX
+			set_vf = chip8->vregs[Y] >= chip8->vregs[X];
 			chip8->vregs[X] = chip8->vregs[Y] - chip8->vregs[X];
-		break; case 0xE: // 8X0E: ? - VX <<= 1, VF = MSB
+			chip8->vregs[15] = (size_t)set_vf;
+		break; case 0xE: // 8X0E: VX <<= 1, VF = MSB
 			// TODO: option to shift VX into VY
 			chip8->vregs[15] = (chip8->vregs[X] & 0x80) != 0;
 			chip8->vregs[X] <<= 1;

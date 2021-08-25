@@ -2,6 +2,7 @@
 //    - https://tobiasvl.github.io/blog/write-a-chip-8-emulator/
 
 #include <stdlib.h>
+#include <stdarg.h>
 #include <unistd.h>
 #include <sys/types.h>
 #include <sys/stat.h>
@@ -10,6 +11,7 @@
 
 #include "chip8.h"
 #include "util.h"
+#include "font.h"
 
 static SDL_Window *window = NULL;
 static SDL_Renderer *renderer = NULL;
@@ -51,7 +53,7 @@ init_gui(void)
 	window = SDL_CreateWindow(
 		"CHIP-8",
 		SDL_WINDOWPOS_CENTERED, SDL_WINDOWPOS_CENTERED,
-		C_D_WIDTH * 10, C_D_HEIGHT * 10,
+		C_D_WIDTH * 10, (C_D_HEIGHT * 10) * 2,
 		SDL_WINDOW_SHOWN
 	);
 	if (window == NULL)
@@ -65,7 +67,7 @@ init_gui(void)
 		renderer,
 		SDL_PIXELFORMAT_RGBA8888,
 		SDL_TEXTUREACCESS_STREAMING,
-		128, 64
+		128, 64 * 2
 	);
 	if (texture == NULL)
 		return false;
@@ -93,15 +95,53 @@ init_gui(void)
 	return true;
 }
 
+static void __attribute__((format(printf, 6, 7)))
+draw_text(uint32_t *pixels, size_t x, size_t y, uint32_t fg, uint32_t bg, char *fmt, ...)
+{
+	const size_t bdf_magic[] = { 0x80, 0x40, 0x20, 0x10, 0x08, 0x04, 0x02, 0x01 };
+
+	char buf[4096];
+	memset(buf, 0x0, sizeof(buf));
+	va_list ap;
+	va_start(ap, fmt);
+	int len = vsnprintf(buf, sizeof(buf), fmt, ap);
+	va_end(ap);
+	ENSURE((size_t) len < sizeof(buf));
+
+	// Set background color.
+	for (size_t dy = y; dy < (y + FONT_HEIGHT + 1); ++dy) {
+		for (size_t dx = x; dx < (x + ((FONT_WIDTH + 1) * len) + 1); ++dx) {
+			pixels[(128 * dy) + dx] = bg;
+		}
+	}
+
+	for (size_t startx = x + 1, ich = 0; ich < (size_t)len; ++ich) {
+		char ch = buf[ich];
+
+		for (size_t dy = y, fy = 0; fy < FONT_HEIGHT; ++fy, ++dy) {
+			uint8_t font_row = font_data[(ch * FONT_HEIGHT) + fy];
+
+			for (size_t dx = startx, fx = 0; fx < FONT_WIDTH; ++fx, ++dx) {
+				bool font_px = (font_row & bdf_magic[fx]) != 0;
+				pixels[(128 * dy) + dx] = font_px ? fg : bg;
+			}
+		}
+
+		startx += FONT_WIDTH + 1;
+	}
+}
+
 static void
 draw(struct CHIP8 *chip8)
 {
 	const uint32_t colors[] = {
-		0x001000, // backColor
-		0xe0ffff, // fillColor  lightcyan
-		0x7fffd4, // fillColor2 aquamarine
-		0x7fffd4, // blendcolor aquamarine
+		0x001000ff, // backColor
+		0xeeeeeeff, // fillColor
+		0x7fffd4ff, // fillColor2 aquamarine
+		0x7fffd4ff, // blendcolor aquamarine
 	};
+	const uint32_t d_fg = 0x001000ff; // fg for debug text
+	const uint32_t d_bg = 0xeeeeeeff; // bg for debug text
 
 	uint32_t *pixels;
 	int       pitch;
@@ -135,8 +175,66 @@ draw(struct CHIP8 *chip8)
 		}
 	}
 
-	SDL_UnlockTexture(texture);
+	// Set background color of information area to white.
+	for (size_t dy = S_D_HEIGHT; dy < 128; ++dy)
+		for (size_t dx = 0; dx < S_D_WIDTH; ++dx)
+			pixels[(128 * dy) + dx] = d_bg;
 
+	// Draw instruction queue.
+	for (
+		size_t y = S_D_HEIGHT + 4, ipc = CHKSUB(chip8->PC, 3);
+		y < (127 - FONT_HEIGHT) && ipc < SIZEOF(chip8->memory);
+		y += FONT_HEIGHT + 1, ++ipc
+	) {
+		struct CHIP8_inst inst = chip8_next(chip8, ipc);
+		draw_text(
+			pixels, 1, y, d_fg,
+			ipc == chip8->PC ? 0xb9bab9ff : d_bg,
+			"%04X", inst.op
+		);
+	}
+
+	// Draw registers.
+	for (
+		size_t y = S_D_HEIGHT + 4, r = 0;
+		y < (127 - FONT_HEIGHT) && r < 8;
+		y += FONT_HEIGHT + 1, ++r
+	) {
+		draw_text(
+			pixels, 8 * FONT_WIDTH, y, d_fg, d_bg,
+			"v%X:%04X  v%X:%04X",
+			r, chip8->vregs[r], r + 8, chip8->vregs[r + 8]
+		);
+	}
+
+	size_t y = S_D_HEIGHT + 4;
+	size_t x = (19 * (FONT_WIDTH + 2)) - 1;
+
+	draw_text(pixels, x, y, d_fg, d_bg, "plane:%02X", chip8->plane);     y += FONT_HEIGHT + 1;
+	draw_text(pixels, x, y, d_fg, d_bg, "delay:%02X", chip8->delay_tmr); y += FONT_HEIGHT + 1;
+	draw_text(pixels, x, y, d_fg, d_bg, " I: %04X", chip8->I);           y += FONT_HEIGHT + 1;
+	draw_text(pixels, x, y, d_fg, d_bg, "PC: %04X", chip8->PC);          y += FONT_HEIGHT + 1;
+	draw_text(pixels, x, y, d_fg, d_bg, "SC: %04X", chip8->SC);          y += FONT_HEIGHT + 1;
+
+	draw_text(pixels, x, y,
+		d_bg,
+		chip8->hires ? 0x8e8f2cff : 0xb9bab9ff,
+		" HI RES "
+	); y += FONT_HEIGHT + 1;
+
+	draw_text(pixels, x, y,
+		d_bg,
+		chip8->wait_key != -1 ? 0x2c2c8eff : 0xb9bab9ff,
+		" KEYINP "
+	); y += FONT_HEIGHT + 1;
+
+	draw_text(pixels, x, y,
+		d_bg,
+		chip8->sound_tmr > 0 ? 0x8e2c2cff : 0xb9bab9ff,
+		" BUZZER "
+	); y += FONT_HEIGHT + 1;
+
+	SDL_UnlockTexture(texture);
 	SDL_RenderClear(renderer);
 	SDL_RenderCopy(renderer, texture, NULL, NULL);
 	SDL_RenderPresent(renderer);
@@ -272,56 +370,6 @@ exec(struct CHIP8 *chip8)
 		break; default:
 		break;
 		}
-	}
-
-	if (true) return;
-
-	ssize_t rs = 1000 / 60;
-
-	ssize_t last_ticks = SDL_GetTicks();
-	ssize_t last_delta = 0;
-	ssize_t global_delta = 0;
-	ssize_t step_delta = 0;
-	ssize_t render_delta = 0;
-
-	while (!quit) {
-		while (SDL_PollEvent(&ev)) {
-			if (ev.type == SDL_QUIT) {
-				quit = true;
-				break;
-			}
-		}
-
-		// Update timers.
-		last_delta = SDL_GetTicks() - last_ticks;
-		last_ticks = SDL_GetTicks();
-
-		// Opcode execution; estimated 1000 ops/s
-		step_delta += last_delta;
-		while (step_delta >= 1) {
-			chip8_step(chip8);
-			--step_delta;
-		}
-
-		global_delta += last_delta;
-		while (global_delta > rs) {
-			global_delta -= rs;
-
-			chip8->delay_tmr = CHKSUB(chip8->delay_tmr, 1);
-			chip8->sound_tmr = CHKSUB(chip8->sound_tmr, 1);
-
-			sound(chip8->sound_tmr > 0);
-		}
-
-		// Render frame every 1/60th of a second
-		render_delta += last_delta;
-		while (render_delta >= rs) {
-			if (chip8->redraw) draw(chip8);
-			render_delta -= rs;
-		}
-		chip8->redraw = false;
-
-		SDL_Delay(1);
 	}
 }
 

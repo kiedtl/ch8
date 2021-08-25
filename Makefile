@@ -28,6 +28,7 @@ all: $(NAME)-sdl
 	$(CMD)$(CC) -c $< -o $@ $(CFLAGS)
 
 $(OBJ): chip8.h
+$(NAME)-sdl: font.h
 
 $(NAME)-sdl: sdl_main.c $(OBJ)
 	@printf "    %-8s%s\n" "CCLD" $@

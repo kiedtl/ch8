@@ -1,2 +1,5 @@
 ch8
+ch8-sdl
+*.o
 core
+log

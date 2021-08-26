@@ -19,6 +19,9 @@ static SDL_Texture *texture = NULL;
 static SDL_AudioDeviceID device = 0;
 static SDL_AudioSpec *spec = NULL;
 
+static bool debug = true;
+static size_t debug_steps = 0;
+
 // Stolen from danirod/chip8
 struct AudioData {
 	float tone_pos;
@@ -351,18 +354,25 @@ exec(struct CHIP8 *chip8)
 			switch (kcode) {
 			break; case SDLK_ESCAPE:
 				quit = true;
+			break; case SDLK_F1:
+				debug = !debug;
+			break; case SDLK_F2:
+				debug_steps += 1;
 			break; default:
 				for (size_t i = 0; i < SIZEOF(keys); ++i)
 					if (kcode == keys[i]) key_statuses[i] = false;
 			break;
 			}
 		break; case SDL_USEREVENT:
-			for (size_t i = 0; i < 512; ++i)
+			for (size_t i = 0; (!debug || (debug && debug_steps > 0)) && i < 512; ++i) {
 				chip8_step(chip8);
+				if (debug && debug_steps > 0) debug_steps -= 1;
+			}
+
 			SDL_FlushEvent(SDL_USEREVENT);
 
-			chip8->delay_tmr = CHKSUB(chip8->delay_tmr, 1);
-			chip8->sound_tmr = CHKSUB(chip8->sound_tmr, 1);
+			if (chip8->delay_tmr > 0) --chip8->delay_tmr;
+			if (chip8->sound_tmr > 0) --chip8->sound_tmr;
 
 			sound(chip8->sound_tmr > 0);
 

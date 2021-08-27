@@ -185,9 +185,9 @@ draw(struct CHIP8 *chip8)
 
 	// Draw instruction queue.
 	for (
-		size_t y = S_D_HEIGHT + 4, ipc = CHKSUB(chip8->PC, 3);
+		size_t y = S_D_HEIGHT + 4, ipc = chip8->PC;
 		y < (127 - FONT_HEIGHT) && ipc < SIZEOF(chip8->memory);
-		y += FONT_HEIGHT + 1, ++ipc
+		y += FONT_HEIGHT + 1
 	) {
 		struct CHIP8_inst inst = chip8_next(chip8, ipc);
 		draw_text(
@@ -195,6 +195,7 @@ draw(struct CHIP8 *chip8)
 			ipc == chip8->PC ? 0xb9bab9ff : d_bg,
 			"%04X", inst.op
 		);
+		ipc += inst.op_len;
 	}
 
 	// Draw registers.
@@ -346,8 +347,12 @@ exec(struct CHIP8 *chip8)
 		break; case SDL_KEYDOWN:
 			kcode = ev.key.keysym.sym;
 
-			for (size_t i = 0; i < SIZEOF(keys); ++i)
-				if (kcode == keys[i]) key_statuses[i] = true;
+			for (size_t i = 0; i < SIZEOF(keys); ++i) {
+				if (kcode == keys[i]) {
+					key_statuses[i] = true;
+					break;
+				}
+			}
 		break; case SDL_KEYUP:
 			kcode = ev.key.keysym.sym;
 
@@ -359,8 +364,16 @@ exec(struct CHIP8 *chip8)
 			break; case SDLK_F2:
 				debug_steps += 1;
 			break; default:
-				for (size_t i = 0; i < SIZEOF(keys); ++i)
-					if (kcode == keys[i]) key_statuses[i] = false;
+				for (size_t i = 0; i < SIZEOF(keys); ++i) {
+					if (kcode == keys[i]) {
+						key_statuses[i] = false;
+						if (chip8->wait_key != -1) {
+							chip8->vregs[chip8->wait_key] = i;
+							chip8->wait_key = -1;
+						}
+						break;
+					}
+				}
 			break;
 			}
 		break; case SDL_USEREVENT:

@@ -63,30 +63,29 @@ chip8_next(struct CHIP8 *chip8, size_t where)
 	return inst;
 }
 
+// Stolen from:
+// https://github.com/JohnEarnest/c-octo, src/octo_emulator.h, octo_emulator_move_pix()
+//
+static void
+chip8_mvpx(struct CHIP8 *chip8, ssize_t dx, ssize_t dy, ssize_t sx, ssize_t sy)
+{
+	for (size_t plane = 1; plane <= 2; ++plane) {
+		if (chip8->plane & plane) {
+			uint8_t *d = &chip8->display[(dy * D_WIDTH) + dx];
+			uint8_t *s = &chip8->display[(sy * D_WIDTH) + sx];
+			uint8_t color = (sx < 0 || sy < 0 || sx >= D_WIDTH || sy >= D_HEIGHT)
+				? 0 : plane & *s;
+			*d &= ~plane; // Remove old pixel
+			*d |= color;  // Set new pixel
+		}
+	}
+}
+
 void
 chip8_step(struct CHIP8 *chip8)
 {
-	if (chip8->halt) {
+	if (chip8->halt || chip8->wait_key != -1) {
 		return;
-	}
-
-	// Check if we're waiting for a keypress.
-	if (chip8->wait_key != -1) {
-		size_t pressed = 0;
-		for (char key = 0; key < 15; ++key) {
-			if ((chip8->keydown_fn)(key)) {
-				pressed = key;
-				break;
-			}
-		}
-
-		if (pressed != 0) {
-			// Key was pressed
-			chip8->vregs[chip8->wait_key] = pressed;
-			chip8->wait_key = -1;
-		} else {
-			return;
-		}
 	}
 
 	struct CHIP8_inst inst = chip8_next(chip8, chip8->PC);
@@ -106,61 +105,44 @@ chip8_step(struct CHIP8 *chip8)
 	switch (P) {
 	break; case 0x0:
 		if (Y == 0xC) { // 00CN: (SCHIP) Scroll down by N pixels.
-			for (size_t y = (D_HEIGHT - 1 - N); y > 0; --y) {
-				for (size_t x = 0; x < D_WIDTH; ++x) {
-					size_t old_i = y * D_WIDTH + x;
-					size_t new_i = (y + N) * D_WIDTH + x;
-
-					chip8->display[new_i] = chip8->display[old_i];
+			for (ssize_t y = D_HEIGHT - 1; y >= 0; --y) {
+				for (ssize_t x = 0; x < D_WIDTH; ++x) {
+					chip8_mvpx(chip8, x, y, x, y - N);
 				}
 			}
-
-			memset(chip8->memory, 0x0, N * D_WIDTH);
 		} else if (Y == 0xD) { // 00DN: (XO) Scroll up by N pixels.
-			for (size_t y = 0; y < (size_t)(D_HEIGHT - 1 - N); ++y) {
+			for (ssize_t y = 0; y < D_HEIGHT; ++y) {
 				for (size_t x = 0; x < D_WIDTH; ++x) {
-					size_t old_i = y * D_WIDTH + x;
-					size_t new_i = (y - N) * D_WIDTH + x;
-
-					chip8->display[new_i] = chip8->display[old_i];
+					chip8_mvpx(chip8, x, y, x, y + N);
 				}
 			}
-
-			memset(&chip8->memory[(D_HEIGHT - 1 - N) * D_WIDTH], 0x0, N * D_WIDTH);
 		} else {
 			switch (op) {
 			break; case 0x00E0: // 00E0: CLS - reset display
 				chip8->redraw = true;
-				memset(chip8->display, 0x0, sizeof(chip8->display));
+				for (size_t i = 0; i < sizeof(chip8->display); ++i)
+					chip8->display[i] &= ~chip8->plane;
 			break; case 0x00EE: // 00EE: RET - pop stack frame and return to that address
 				// TODO: handle underflow
 				chip8->SC -= 1;
 				chip8->PC = chip8->stack[chip8->SC];
 				chip8->stack[chip8->SC] = 0;
 			break; case 0x00FB: // 00FB: Scroll right by 4 pixels.
-				for (size_t x = D_WIDTH - 5; x > 0; --x) {
-					for (size_t y = 0; y < D_HEIGHT; ++y) {
-						size_t old_i = y * D_WIDTH + x;
-						size_t new_i = y * D_WIDTH + (x + 4);
-
-						chip8->display[new_i] = chip8->display[old_i];
-					}
-				}
+				for (ssize_t y = 0; y < D_HEIGHT; ++y)
+					for (ssize_t x = D_WIDTH - 1; x >= 0; --x)
+						chip8_mvpx(chip8, x, y, x - 4, y);
 			break; case 0x00FC: // 00FC: Scroll left by 4 pixels.
-				for (size_t x = 4; x <= D_WIDTH - 1; ++x) {
-					for (size_t y = 0; y < D_HEIGHT; ++y) {
-						size_t old_i = y * D_WIDTH + x;
-						size_t new_i = y * D_WIDTH + (x - 4);
-
-						chip8->display[new_i] = chip8->display[old_i];
-					}
-				}
+				for (ssize_t y = 0; y < D_HEIGHT; ++y)
+					for (ssize_t x = 0; x < D_WIDTH; ++x)
+						chip8_mvpx(chip8, x, y, x + 4, y);
 			break; case 0x00FD: // 00FD: Halt.
 				chip8->halt = true;
 			break; case 0x00FE: // 00FE: Disable hi-res mode.
-				chip8->hires = true;
-			break; case 0x00FF: // 00FF: Enable hi-res mode.
 				chip8->hires = false;
+				memset(chip8->display, 0x0, sizeof(chip8->display));
+			break; case 0x00FF: // 00FF: Enable hi-res mode.
+				chip8->hires = true;
+				memset(chip8->display, 0x0, sizeof(chip8->display));
 			};
 		}
 	break; case 0x1: // 1NNN: JMP - Jump to NNN
@@ -179,12 +161,16 @@ chip8_step(struct CHIP8 *chip8)
 		break; case 0: // 5XY0: Skip next if X == Y
 			if (chip8->vregs[X] == chip8->vregs[Y])
 				chip8->PC += chip8_next(chip8, chip8->PC).op_len;
-		break; case 2: // 5XY2: (XO) Save registers VX..VY to memory starting at I.
-			for (size_t m = 0, r = X; r <= Y; ++m, ++r)
-				chip8->memory[chip8->I + m] = chip8->vregs[r];
-		break; case 3: // 5XY3: Load registers VX..VY from memory starting at I.
-			for (size_t m = 0, r = X; r <= Y; ++m, ++r)
-				chip8->vregs[r] = chip8->memory[chip8->I + m];
+		break; case 2: // 5XY2: (XO) Save registers VX..=VY to memory starting at I.
+			for (size_t i = 0; i <= abs((ssize_t)X - (ssize_t)Y); ++i) {
+				size_t r = X < Y ? X + i : X - i;
+				chip8->memory[chip8->I + i] = chip8->vregs[r];
+			}
+		break; case 3: // 5XY3: Load registers VX..=VY from memory starting at I.
+			for (size_t i = 0; i <= abs((ssize_t)X - (ssize_t)Y); ++i) {
+				size_t r = X < Y ? X + i : X - i;
+				chip8->vregs[r] = chip8->memory[chip8->I + i];
+			}
 		break; default:
 		break;
 		}

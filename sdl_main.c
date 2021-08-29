@@ -141,7 +141,7 @@ draw(struct CHIP8 *chip8)
 		0x001000ff, // backColor
 		0xeeeeeeff, // fillColor
 		0x7fffd4ff, // fillColor2 aquamarine
-		0x7fffd4ff, // blendcolor aquamarine
+		0xffebcdff, // blendcolor aquamarine
 	};
 	const uint32_t d_fg = 0x001000ff; // fg for debug text
 	const uint32_t d_bg = 0xeeeeeeff; // bg for debug text
@@ -377,7 +377,7 @@ exec(struct CHIP8 *chip8)
 			break;
 			}
 		break; case SDL_USEREVENT:
-			for (size_t i = 0; (!debug || (debug && debug_steps > 0)) && i < 512; ++i) {
+			for (size_t i = 0; (!debug || (debug && debug_steps > 0)) && i < 500; ++i) {
 				chip8_step(chip8);
 				if (debug && debug_steps > 0) debug_steps -= 1;
 			}

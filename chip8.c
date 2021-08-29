@@ -217,67 +217,44 @@ chip8_step(struct CHIP8 *chip8)
 		chip8->I = NNN;
 	break; case 0xB: // BNNN: Jump to V0 + NNN
 		// TODO: configurable BXNN behaviour (jump to XNN + VX)?
-		chip8->PC = (chip8->vregs[0] + NNN) & 0xFFF;
+		//chip8->PC = NNN + chip8->vregs[0];
+		chip8->PC = NNN + chip8->vregs[X];
 	break; case 0xC: // CXNN: VX = rand() & NN
 		chip8->vregs[X] = rand() & NN;
 	break; case 0xD: // DXYN: Draw a sprite with a height of N at coord VX,VY
 		chip8->redraw = true;
-		size_t x = chip8->vregs[X] & (D_WIDTH-1);
-		size_t y = chip8->vregs[Y] & (D_HEIGHT-1);
+		size_t coord_x = chip8->vregs[X] & (D_WIDTH-1);
+		size_t coord_y = chip8->vregs[Y] & (D_HEIGHT-1);
 		chip8->vregs[15] = 0;
 
-		if (chip8->plane != 0 && chip8->hires && N == 0) {
-			for (int j = 0; j < 16; ++j) {
-				if ((y + j) >= D_HEIGHT) continue;
+		size_t i = chip8->I;
+		size_t xd = N == 0 ? 16 : 8;
+		size_t yd = N == 0 ? 16 : N;
 
-				uint8_t sprite_row_hi = chip8->memory[chip8->I + 2 * j + 0];
-				uint8_t sprite_row_lo = chip8->memory[chip8->I + 2 * j + 1];
-				uint16_t sprite_row = sprite_row_hi << 8 | sprite_row_lo;
+		for (size_t color = 1; color <= 2; ++color) {
+			if ((chip8->plane & color) == 0) continue;
 
-				for (size_t i = 0; i < 16; ++i) {
-					size_t ix = (x + i) & (D_WIDTH-1);
-					size_t iy = (y + j) & (D_HEIGHT-1);
-					if (ix >= D_WIDTH) break;
+			for (size_t y = 0; y < yd; ++y) for (size_t x = 0; x < xd; ++x) {
+				size_t p = N == 0 ? (chip8->memory[i + (2 * y) + (x > 7 ? 1 : 0)] >> (7 - (x % 8)))
+				                  : (chip8->memory[i +      y                   ] >> (7 - x      ));
+				p &= 1;
 
-					size_t pos = (D_WIDTH * iy) + ix;
-					size_t sprite_pixel = (sprite_row & (1 << (15 - i))) != 0;
+				size_t pos_x = (x + coord_x) & (D_WIDTH-1);
+				size_t pos_y = (y + coord_y) & (D_HEIGHT-1);
+				size_t pos = (D_WIDTH * pos_y) + pos_x;
 
-					if (sprite_pixel != 0) {
-						uint8_t *pixel = &chip8->display[pos];
-						if ((chip8->plane & *pixel) == 0) { // set
-							*pixel |= chip8->plane;
-						} else { // clear
-							*pixel &= ~chip8->plane;
-							chip8->vregs[15] = 1;
-						}
+				if (p) {
+					uint8_t *pixel = &chip8->display[pos];
+					if ((color & *pixel) == 0) { // set
+						*pixel |= color;
+					} else { // clear
+						*pixel &= ~color;
+						chip8->vregs[15] = 1;
 					}
 				}
+				
 			}
-		} else if (chip8->plane != 0) {
-			for (int j = 0; j < N; ++j) {
-				if ((y + j) >= D_HEIGHT) continue;
-
-				uint8_t sprite_row = chip8->memory[chip8->I + j];
-
-				for (int i = 0; i < 8; ++i) {
-					size_t ix = (x + i) & (D_WIDTH-1);
-					size_t iy = (y + j) & (D_HEIGHT-1);
-					if (ix >= D_WIDTH) break;
-
-					size_t pos = (D_WIDTH * iy) + ix;
-					size_t sprite_pixel = (sprite_row & (1 << (7 - i))) != 0;
-
-					if (sprite_pixel != 0) {
-						uint8_t *pixel = &chip8->display[pos];
-						if ((chip8->plane & *pixel) == 0) { // set
-							*pixel |= chip8->plane;
-						} else { // clear
-							*pixel &= ~chip8->plane;
-							chip8->vregs[15] = 1;
-						}
-					}
-				}
-			}
+			i += N == 0 ? 32 : N;
 		}
 	break; case 0xE:
 		;

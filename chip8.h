@@ -56,7 +56,7 @@ static const uint8_t s_fonts[] = {
 typedef size_t (*keydown_fn_t)(char);
 
 struct CHIP8 {
-	uint8_t  memory[4096];
+	uint8_t  memory[65535];
 	uint8_t  display[S_D_HEIGHT * S_D_WIDTH];
 	size_t   plane;
 	size_t   PC;

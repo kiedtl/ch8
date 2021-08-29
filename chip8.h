@@ -75,7 +75,62 @@ struct CHIP8 {
 	keydown_fn_t keydown_fn;
 };
 
+enum CHIP8_inst_type {
+	I_00CN,
+	I_00DN,
+	I_00E0,
+	I_00EE,
+	I_00FB,
+	I_00FC,
+	I_00FD,
+	I_00FE,
+	I_00FF,
+	I_1NNN,
+	I_2NNN,
+	I_3XNN,
+	I_4XNN,
+	I_5XY0,
+	I_5XY2,
+	I_5XY3,
+	I_6XNN,
+	I_7XNN,
+	I_8XY0,
+	I_8XY1,
+	I_8XY2,
+	I_8XY3,
+	I_8XY4,
+	I_8XY5,
+	I_8X06,
+	I_8XY7,
+	I_8X0E,
+	I_9XY0,
+	I_ANNN,
+	I_BNNN,
+	I_CXNN,
+	I_DXYN,
+	I_EX9E,
+	I_EXA1,
+	I_F000,
+	I_FX01,
+	I_F002,
+	I_FX07,
+	I_FX15,
+	I_FX18,
+	I_FX29,
+	I_FX30,
+	I_FX1E,
+	I_FX0A,
+	I_FX33,
+	I_FX55,
+	I_FX65,
+	I_FX75,
+	I_FX85,
+	I_UNKNOWN,
+	I_MAX,
+};
+
 struct CHIP8_inst {
+	enum CHIP8_inst_type type;
 	uint16_t   op;
 	size_t op_len;
 	uint8_t     P;

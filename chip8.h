@@ -125,8 +125,8 @@ enum CHIP8_inst_type {
 	I_FX65,
 	I_FX75,
 	I_FX85,
-	I_UNKNOWN,
 	I_MAX,
+	I_UNKNOWN,
 };
 
 struct CHIP8_inst {

@@ -22,5 +22,6 @@ void __ensure(_Bool expr, char *str, char *file, size_t line, const char *fn);
 
 void die(const char *fmt, ...);
 char *format(const char *format, ...);
+uint32_t hsl_to_rgb(float _h, float _s, float _l);
 
 #endif

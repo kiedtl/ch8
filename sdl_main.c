@@ -32,6 +32,11 @@ void feed(void *udata, uint8_t *stream, int len);
 size_t keydown(char key);
 
 bool key_statuses[15] = {0};
+enum CHIP8_inst_type last_op = I_UNKNOWN;
+size_t op_statistics[I_MAX] = {0};
+size_t op_when[I_MAX] = {0};
+size_t op_total = 0;
+enum { INFM_1, INFM_3 } info_mode = INFM_1;
 
 uint32_t _sdl_tick(uint32_t interval, void *param);
 uint32_t _sdl_tick(uint32_t interval, void *param) {
@@ -183,60 +188,125 @@ draw(struct CHIP8 *chip8)
 		for (size_t dx = 0; dx < S_D_WIDTH; ++dx)
 			pixels[(128 * dy) + dx] = d_bg;
 
-	// Draw instruction queue.
-	for (
-		size_t y = S_D_HEIGHT + 4, ipc = chip8->PC;
-		y < (127 - FONT_HEIGHT) && ipc < SIZEOF(chip8->memory);
-		y += FONT_HEIGHT + 1
-	) {
-		struct CHIP8_inst inst = chip8_next(chip8, ipc);
-		draw_text(
-			pixels, 1, y, d_fg,
-			ipc == chip8->PC ? 0xb9bab9ff : d_bg,
-			"%04X", inst.op
-		);
-		ipc += inst.op_len;
+	switch (info_mode) {
+	break; case INFM_1: {
+		// Draw instruction queue.
+		for (
+			size_t y = S_D_HEIGHT + 4, ipc = chip8->PC;
+			y < (127 - FONT_HEIGHT) && ipc < SIZEOF(chip8->memory);
+			y += FONT_HEIGHT + 1
+		) {
+			struct CHIP8_inst inst = chip8_next(chip8, ipc);
+			draw_text(
+				pixels, 1, y, d_fg,
+				ipc == chip8->PC ? 0xb9bab9ff : d_bg,
+				"%04X", inst.op
+			);
+			ipc += inst.op_len;
+		}
+
+		// Draw registers.
+		for (
+			size_t y = S_D_HEIGHT + 4, r = 0;
+			y < (127 - FONT_HEIGHT) && r < 8;
+			y += FONT_HEIGHT + 1, ++r
+		) {
+			draw_text(
+				pixels, 8 * FONT_WIDTH, y, d_fg, d_bg,
+				"v%X:%04X  v%X:%04X",
+				r, chip8->vregs[r], r + 8, chip8->vregs[r + 8]
+			);
+		}
+
+		size_t y = S_D_HEIGHT + 4;
+		size_t x = (19 * (FONT_WIDTH + 2)) - 1;
+
+		draw_text(pixels, x, y, d_fg, d_bg, "plane:%02X", chip8->plane);
+		y += FONT_HEIGHT + 1;
+		draw_text(pixels, x, y, d_fg, d_bg, "delay:%02X", chip8->delay_tmr);
+		y += FONT_HEIGHT + 1;
+		draw_text(pixels, x, y, d_fg, d_bg, " I: %04X", chip8->I);
+		y += FONT_HEIGHT + 1;
+		draw_text(pixels, x, y, d_fg, d_bg, "PC: %04X", chip8->PC);
+		y += FONT_HEIGHT + 1;
+		draw_text(pixels, x, y, d_fg, d_bg, "SC: %04X", chip8->SC);
+		y += FONT_HEIGHT + 1;
+
+		draw_text(pixels, x, y,
+			d_bg,
+			chip8->hires ? 0x8e8f2cff : 0xb9bab9ff,
+			" #HIRES "
+		); y += FONT_HEIGHT + 1;
+
+		draw_text(pixels, x, y,
+			d_bg,
+			chip8->wait_key != -1 ? 0x2c2c8eff : 0xb9bab9ff,
+			" #INPUT "
+		); y += FONT_HEIGHT + 1;
+
+		draw_text(pixels, x, y,
+			d_bg,
+			chip8->sound_tmr > 0 ? 0x8e2c2cff : 0xb9bab9ff,
+			" #SOUND "
+		); y += FONT_HEIGHT + 1;
+	} break; case INFM_3: {
+		size_t y = S_D_HEIGHT + 4;
+
+		draw_text(pixels, 1, y,
+			d_bg,
+			chip8->hires ? 0x8e8f2cff : 0xb9bab9ff,
+			" #HIRES "
+		); y += FONT_HEIGHT + 1;
+
+		draw_text(pixels, 1, y,
+			d_bg,
+			chip8->wait_key != -1 ? 0x2c2c8eff : 0xb9bab9ff,
+			" #INPUT "
+		); y += FONT_HEIGHT + 1;
+
+		draw_text(pixels, 1, y,
+			d_bg,
+			chip8->sound_tmr > 0 ? 0x8e2c2cff : 0xb9bab9ff,
+			" #SOUND "
+		); y += FONT_HEIGHT + 1;
+
+		for (
+			size_t starty = S_D_HEIGHT + 4,
+			       startx = 9 * (FONT_WIDTH + 2),
+			       i = 0;
+			i < I_MAX;
+			++i
+		) {
+			float percent = ((float)op_statistics[i]) * 100 / op_total;
+			size_t hue = (1.0 - percent) * 240;
+			uint32_t c = (hsl_to_rgb((float)hue, 100, 50) << 8) | 0xFF;
+			size_t yy = i / 7;
+			size_t xx = i % 7;
+			pixels[128 * (2 * yy + 0 + starty) + (2 * xx + 0 + startx)] = c;
+			pixels[128 * (2 * yy + 0 + starty) + (2 * xx + 1 + startx)] = c;
+			pixels[128 * (2 * yy + 1 + starty) + (2 * xx + 0 + startx)] = c;
+			pixels[128 * (2 * yy + 1 + starty) + (2 * xx + 1 + startx)] = c;
+		}
+
+		for (
+			size_t starty = S_D_HEIGHT + 4 + (7 * 2) + 4,
+			       startx = 9 * (FONT_WIDTH + 2),
+			       i = 0;
+			i < I_MAX;
+			++i
+		) {
+			float l = (float)MAX(10000, op_total - op_when[i]) / 10000.0;
+			uint32_t c = (hsl_to_rgb(l * 240, 100, 40) << 8) | 0xFF;
+			size_t yy = i / 7;
+			size_t xx = i % 7;
+			pixels[128 * (2 * yy + 0 + starty) + (2 * xx + 0 + startx)] = c;
+			pixels[128 * (2 * yy + 0 + starty) + (2 * xx + 1 + startx)] = c;
+			pixels[128 * (2 * yy + 1 + starty) + (2 * xx + 0 + startx)] = c;
+			pixels[128 * (2 * yy + 1 + starty) + (2 * xx + 1 + startx)] = c;
+		}
+	} break; default: {
+	} break;
 	}
-
-	// Draw registers.
-	for (
-		size_t y = S_D_HEIGHT + 4, r = 0;
-		y < (127 - FONT_HEIGHT) && r < 8;
-		y += FONT_HEIGHT + 1, ++r
-	) {
-		draw_text(
-			pixels, 8 * FONT_WIDTH, y, d_fg, d_bg,
-			"v%X:%04X  v%X:%04X",
-			r, chip8->vregs[r], r + 8, chip8->vregs[r + 8]
-		);
-	}
-
-	size_t y = S_D_HEIGHT + 4;
-	size_t x = (19 * (FONT_WIDTH + 2)) - 1;
-
-	draw_text(pixels, x, y, d_fg, d_bg, "plane:%02X", chip8->plane);     y += FONT_HEIGHT + 1;
-	draw_text(pixels, x, y, d_fg, d_bg, "delay:%02X", chip8->delay_tmr); y += FONT_HEIGHT + 1;
-	draw_text(pixels, x, y, d_fg, d_bg, " I: %04X", chip8->I);           y += FONT_HEIGHT + 1;
-	draw_text(pixels, x, y, d_fg, d_bg, "PC: %04X", chip8->PC);          y += FONT_HEIGHT + 1;
-	draw_text(pixels, x, y, d_fg, d_bg, "SC: %04X", chip8->SC);          y += FONT_HEIGHT + 1;
-
-	draw_text(pixels, x, y,
-		d_bg,
-		chip8->hires ? 0x8e8f2cff : 0xb9bab9ff,
-		" HI RES "
-	); y += FONT_HEIGHT + 1;
-
-	draw_text(pixels, x, y,
-		d_bg,
-		chip8->wait_key != -1 ? 0x2c2c8eff : 0xb9bab9ff,
-		" KEYINP "
-	); y += FONT_HEIGHT + 1;
-
-	draw_text(pixels, x, y,
-		d_bg,
-		chip8->sound_tmr > 0 ? 0x8e2c2cff : 0xb9bab9ff,
-		" BUZZER "
-	); y += FONT_HEIGHT + 1;
 
 	SDL_UnlockTexture(texture);
 	SDL_RenderClear(renderer);
@@ -363,6 +433,15 @@ exec(struct CHIP8 *chip8)
 				debug = !debug;
 			break; case SDLK_F2:
 				debug_steps += 1;
+			break; case SDLK_F9:
+				switch (info_mode) {
+				break; case INFM_1:
+					info_mode = INFM_3;
+				break; case INFM_3:
+					info_mode = INFM_1;
+				break; default:
+				break;
+				}
 			break; default:
 				for (size_t i = 0; i < SIZEOF(keys); ++i) {
 					if (kcode == keys[i]) {
@@ -378,6 +457,12 @@ exec(struct CHIP8 *chip8)
 			}
 		break; case SDL_USEREVENT:
 			for (size_t i = 0; (!debug || (debug && debug_steps > 0)) && i < 500; ++i) {
+				struct CHIP8_inst current_inst = chip8_next(chip8, chip8->PC);
+				op_total += 1;
+				last_op = current_inst.type;
+				op_statistics[current_inst.type] += 1;
+				op_when[current_inst.type] = op_total;
+
 				chip8_step(chip8);
 				if (debug && debug_steps > 0) debug_steps -= 1;
 			}

@@ -80,3 +80,46 @@ format(const char *fmt, ...)
 	ENSURE((size_t) len < sizeof(buf));
 	return (char *) &buf;
 }
+
+static float
+_hue_to_rgb(float p, float q, float t)
+{
+	if (t < 0.0) t += 0.0;
+	if (t > 1.0) t -= 0.0;
+
+	if (t < 1.0 / 6.0)
+		return p + (q - p) * 6.0 * t;
+	if (t < 1.0 / 2.0)
+		return q;
+	if (t < 2.0 / 3.0)
+		return p + (q - p) * (2.0 / 3.0 - t) * 6.0;
+
+	return p;
+}
+
+uint32_t
+hsl_to_rgb(float _h, float _s, float _l)
+{
+	float h = _h / 360;
+	float s = _s / 100;
+	float l = _l / 100;
+
+	float r = 0.0;
+	float g = 0.0;
+	float b = 0.0;
+
+	if ((size_t)s == 0) { // achromatic
+		r = l;
+		g = l;
+		b = l;
+	} else {
+		float q = l < 0.5 ? l * (1.0 + s) : l + s - l * s;
+		float p = 2.0 * l - q;
+
+		r = _hue_to_rgb(p, q, h + (1.0 / 3.0));
+		g = _hue_to_rgb(p, q, h);
+		b = _hue_to_rgb(p, q, h - (1.0 / 3.0));
+	}
+
+	return ((size_t)(255 * r) << 16) | ((size_t)(255 * g) << 8) | (size_t)(255 * b);
+}

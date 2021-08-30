@@ -301,14 +301,16 @@ draw(struct CHIP8 *chip8)
 		}
 
 		for (
-			size_t starty = S_D_HEIGHT + 4 + (7 * 2) + 4,
+			size_t starty = S_D_HEIGHT + 4 + (7 * 2) + 7,
 			       startx = 8 * (FONT_WIDTH + 2),
 			       i = 0;
 			i < I_MAX;
 			++i
 		) {
-			float l = (float)MAX(10000, op_total - op_when[i]) / 10000.0;
-			uint32_t c = (hsl_to_rgb(l * 240, 100, 40) << 8) | 0xFF;
+			float since = MAX(5000, op_total - op_when[i]);
+			uint8_t gray = MAX((d_bg & 0xFFFF) >> 8,
+					(uint8_t)(255 * ((float)since / 5000)));
+			uint32_t c = (gray << 24) | (gray << 16) | (gray << 8) | 0xFF;
 			size_t yy = i / 7;
 			size_t xx = i % 7;
 			pixels[128 * (2 * yy + 0 + starty) + (2 * xx + 0 + startx)] = c;

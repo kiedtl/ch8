@@ -270,6 +270,18 @@ draw(struct CHIP8 *chip8)
 			" #SOUND "
 		); y += FONT_HEIGHT + 1;
 
+		draw_text(pixels, 1, y,
+			d_bg,
+			debug ? 0x000000ff : 0xb9bab9ff,
+			" #DEBUG "
+		); y += FONT_HEIGHT + 1;
+
+		draw_text(pixels, 1, y,
+			d_bg,
+			chip8->halt ? 0xff5050ff : 0xb9bab9ff,
+			" HALTED "
+		); y += FONT_HEIGHT + 1;
+
 		for (
 			size_t starty = S_D_HEIGHT + 4,
 			       startx = 9 * (FONT_WIDTH + 2),

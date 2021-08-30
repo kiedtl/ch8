@@ -31,7 +31,7 @@ struct AudioData {
 void feed(void *udata, uint8_t *stream, int len);
 size_t keydown(char key);
 
-bool key_statuses[15] = {0};
+bool key_statuses[16] = {0};
 enum CHIP8_inst_type last_op = I_UNKNOWN;
 size_t op_statistics[I_MAX] = {0};
 size_t op_when[I_MAX] = {0};
@@ -284,7 +284,7 @@ draw(struct CHIP8 *chip8)
 
 		for (
 			size_t starty = S_D_HEIGHT + 4,
-			       startx = 9 * (FONT_WIDTH + 2),
+			       startx = 8 * (FONT_WIDTH + 2),
 			       i = 0;
 			i < I_MAX;
 			++i
@@ -302,7 +302,7 @@ draw(struct CHIP8 *chip8)
 
 		for (
 			size_t starty = S_D_HEIGHT + 4 + (7 * 2) + 4,
-			       startx = 9 * (FONT_WIDTH + 2),
+			       startx = 8 * (FONT_WIDTH + 2),
 			       i = 0;
 			i < I_MAX;
 			++i
@@ -315,6 +315,19 @@ draw(struct CHIP8 *chip8)
 			pixels[128 * (2 * yy + 0 + starty) + (2 * xx + 1 + startx)] = c;
 			pixels[128 * (2 * yy + 1 + starty) + (2 * xx + 0 + startx)] = c;
 			pixels[128 * (2 * yy + 1 + starty) + (2 * xx + 1 + startx)] = c;
+		}
+
+		for (
+			size_t starty = S_D_HEIGHT + 4,
+			       startx = 12 * (FONT_WIDTH + 2),
+			       i = 0;
+			i < 16;
+			++i
+		) {
+			uint32_t c = key_statuses[i] ? 0x000000ff : 0xb9bab9ff;
+			size_t yy = starty + ((i / 4) * (FONT_HEIGHT + 1));
+			size_t xx = startx + ((i % 4) * (FONT_WIDTH  + 2));
+			draw_text(pixels, xx, yy, d_bg, c, "%X", i);
 		}
 	} break; default: {
 	} break;

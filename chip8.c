@@ -233,6 +233,7 @@ chip8_step(struct CHIP8 *chip8)
 	uint16_t  NNN = inst.NNN;
 	uint16_t NNNN = inst.NNNN;
 
+	size_t instPC = chip8->PC;
 	chip8->PC += inst.op_len;
 
 	bool set_vf = false;
@@ -339,8 +340,8 @@ chip8_step(struct CHIP8 *chip8)
 		chip8->I = NNN;
 	break; case I_BNNN:
 		// TODO: configurable BXNN behaviour (jump to XNN + VX)?
-		//chip8->PC = NNN + chip8->vregs[0];
-		chip8->PC = NNN + chip8->vregs[X];
+		chip8->PC = NNN + chip8->vregs[0];
+		//chip8->PC = NNN + chip8->vregs[X];
 	break; case I_CXNN:
 		chip8->vregs[X] = rand() & NN;
 	break; case I_DXYN:
@@ -427,7 +428,7 @@ chip8_step(struct CHIP8 *chip8)
 			for (size_t r = 0; r <= X; ++r)
 				chip8->vregs[r] = chip8->fregs[r];
 	break; case I_UNKNOWN:
-		log("Unknown opcode %04X", inst.op);
+		log("Unknown opcode %04X at PC %04X", inst.op, instPC);
 		chip8->halt = true;
 	break; default:
 		log("Internal error: chip8_next returned unknown opcode %04X", inst.op);

@@ -31,6 +31,8 @@ struct AudioData {
 void feed(void *udata, uint8_t *stream, int len);
 size_t keydown(char key);
 
+size_t tickrate = 1500;
+
 bool key_statuses[16] = {0};
 enum CHIP8_inst_type last_op = I_UNKNOWN;
 size_t op_statistics[I_MAX] = {0};
@@ -307,9 +309,9 @@ draw(struct CHIP8 *chip8)
 			i < I_MAX;
 			++i
 		) {
-			float since = MAX(5000, op_total - op_when[i]);
+			float since = MAX((tickrate*10), op_total - op_when[i]);
 			uint8_t gray = MAX((d_bg & 0xFFFF) >> 8,
-					(uint8_t)(255 * ((float)since / 5000)));
+					(uint8_t)(255 * ((float)since / (tickrate*10))));
 			uint32_t c = (gray << 24) | (gray << 16) | (gray << 8) | 0xFF;
 			size_t yy = i / 7;
 			size_t xx = i % 7;
@@ -483,7 +485,11 @@ exec(struct CHIP8 *chip8)
 			break;
 			}
 		break; case SDL_USEREVENT:
-			for (size_t i = 0; (!debug || (debug && debug_steps > 0)) && i < 500; ++i) {
+			for (
+				size_t i = 0;
+				(!debug || (debug && debug_steps > 0)) && i < tickrate;
+				++i
+			) {
 				struct CHIP8_inst current_inst = chip8_next(chip8, chip8->PC);
 				op_total += 1;
 				last_op = current_inst.type;
